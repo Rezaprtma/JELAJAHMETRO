@@ -1,0 +1,824 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🗺️ Jelajahi Kota Metro — Lampung</title>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+    html, body { width:100%; height:100%; overflow:hidden; background:#0a0a14; }
+    canvas { display:block; }
+
+    /* ─── HUD ─── */
+    #hud {
+      position:fixed; top:12px; left:12px; z-index:50;
+      background:rgba(4,4,16,.92); border:2px solid #f4b942;
+      padding:12px 16px; pointer-events:none;
+      font-family:'Press Start 2P',monospace;
+    }
+    #hud-title { font-size:8px; color:#f4b942; line-height:1.9; }
+    #hud-loc   { font-size:6px; color:#fff; margin-top:6px; line-height:1.8; }
+
+    /* ─── MINIMAP ─── */
+    #mm-wrap {
+      position:fixed; top:12px; right:12px; z-index:50; pointer-events:none;
+    }
+    #mm-title {
+      font-family:'Press Start 2P',monospace; font-size:5px;
+      color:#f4b942; text-align:center; margin-bottom:4px;
+    }
+    #mm { border:2px solid #f4b942; display:block; }
+
+    /* ─── POPUP ─── */
+    #popup {
+      position:fixed; bottom:20px; left:50%;
+      transform:translateX(-50%) translateY(130%);
+      width:min(94vw, 460px);
+      background:#07071a; border:3px solid #f4b942;
+      padding:24px 28px; text-align:center; z-index:100;
+      transition:transform .38s cubic-bezier(.175,.885,.32,1.28);
+    }
+    #popup.show { transform:translateX(-50%) translateY(0); }
+    #p-icon  { font-size:46px; margin-bottom:10px; display:block; }
+    #p-cat   {
+      font-family:'Press Start 2P',monospace; font-size:6px;
+      color:#f4b942; letter-spacing:3px; margin-bottom:8px;
+    }
+    #p-name  {
+      font-family:'Press Start 2P',monospace; font-size:10px;
+      color:#fff; line-height:1.8; margin-bottom:10px;
+    }
+    #p-desc  {
+      font-family:'VT323',monospace; font-size:20px;
+      color:#aaa; margin-bottom:18px; line-height:1.4;
+    }
+    #p-btns  { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
+    .pbtn {
+      font-family:'Press Start 2P',monospace; font-size:7px;
+      padding:9px 14px; border:none; cursor:pointer;
+      text-decoration:none; display:inline-block;
+      transition:opacity .15s, transform .1s;
+    }
+    .pbtn:hover { opacity:.82; transform:translateY(-2px); }
+    .pbtn.g  { background:#27ae60; color:#fff; }
+    .pbtn.b  { background:#2980b9; color:#fff; }
+    .pbtn.x  { background:transparent; border:2px solid #444; color:#888; }
+    .pbtn.x:hover { border-color:#f4b942; color:#f4b942; }
+
+    /* ─── CONTROLS ─── */
+    #ctrl {
+      position:fixed; bottom:14px; right:14px; z-index:50;
+      background:rgba(0,0,0,.75); border:1px solid #2a2a2a;
+      padding:10px 12px; pointer-events:none;
+      font-family:'Press Start 2P',monospace; font-size:6px;
+      color:#555; line-height:2.4;
+    }
+
+    /* ─── SPLASH ─── */
+    #splash {
+      position:fixed; inset:0; z-index:999;
+      background:radial-gradient(ellipse at 50% 60%, #0d1b2e 0%, #05060d 100%);
+      display:flex; flex-direction:column; align-items:center;
+      justify-content:center; gap:16px; transition:opacity .7s;
+    }
+    #splash-emoji { font-size:72px; animation:float 3s ease-in-out infinite; }
+    @keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-14px)} }
+    #splash h1 {
+      font-family:'Press Start 2P',monospace; color:#f4b942;
+      font-size:clamp(13px,3vw,22px); text-align:center;
+      line-height:1.8; max-width:620px; padding:0 20px;
+    }
+    #splash-sub {
+      font-family:'VT323',monospace; font-size:22px;
+      color:#556; text-align:center; max-width:520px; padding:0 20px;
+    }
+    #start {
+      font-family:'Press Start 2P',monospace; font-size:11px;
+      background:#f4b942; color:#000; border:none;
+      padding:18px 36px; cursor:pointer; margin-top:10px;
+      animation:glow 1.5s ease-in-out infinite;
+    }
+    @keyframes glow { 0%,100%{box-shadow:0 0 0 #f4b942} 50%{box-shadow:0 0 24px #f4b942,0 0 50px rgba(244,185,66,.3)} }
+    #start:hover { background:#e6a830; transform:scale(1.04); }
+
+    /* ─── MOBILE D-PAD ─── */
+    #dpad {
+      position:fixed; bottom:20px; left:20px; z-index:50;
+      width:152px; height:152px; display:none;
+    }
+    .db {
+      position:absolute; width:48px; height:48px;
+      background:rgba(255,255,255,.13); border:2px solid rgba(255,255,255,.28);
+      color:#fff; font-size:22px; display:flex;
+      align-items:center; justify-content:center;
+      border-radius:6px; touch-action:none; user-select:none;
+      transition:background .1s;
+    }
+    .db.pressed { background:rgba(244,185,66,.35); }
+    #d-u { left:52px; top:0; }
+    #d-d { left:52px; top:104px; }
+    #d-l { left:0;    top:52px; }
+    #d-r { left:104px; top:52px; }
+  </style>
+</head>
+<body>
+
+<!-- ══════════════ SPLASH ══════════════ -->
+<div id="splash">
+  <div id="splash-emoji">🗺️</div>
+  <h1>JELAJAHI KOTA METRO</h1>
+  <div id="splash-sub">
+    Lampung, Indonesia<br><br>
+    Gerakkan karakter dengan ↑↓←→ atau WASD<br>
+    Dekati tempat lalu tekan ENTER / klik untuk info!
+  </div>
+  <button id="start" onclick="startGame()">▶ MULAI JELAJAH</button>
+</div>
+
+<!-- ══════════════ GAME ══════════════ -->
+<canvas id="c"></canvas>
+
+<div id="hud">
+  <div id="hud-title">🏙️ KOTA METRO<br>LAMPUNG</div>
+  <div id="hud-loc">📍 Jelajahi Kota!</div>
+</div>
+
+<div id="mm-wrap">
+  <div id="mm-title">— PETA KOTA —</div>
+  <canvas id="mm" width="160" height="120"></canvas>
+</div>
+
+<div id="popup">
+  <span id="p-icon">📍</span>
+  <div id="p-cat">LOKASI</div>
+  <div id="p-name">Nama Tempat</div>
+  <div id="p-desc">Deskripsi tempat ini.</div>
+  <div id="p-btns"></div>
+</div>
+
+<div id="ctrl">
+  ↑ ↓ ← → / WASD bergerak<br>
+  ENTER buka info lokasi<br>
+  ESC / klik tutup panel
+</div>
+
+<div id="dpad">
+  <div class="db" id="d-u">↑</div>
+  <div class="db" id="d-l">←</div>
+  <div class="db" id="d-r">→</div>
+  <div class="db" id="d-d">↓</div>
+</div>
+
+<!-- ══════════════ SCRIPT ══════════════ -->
+<script>
+'use strict';
+
+// ═══════════════════════════════════════════════════
+// 1. WORLD CONSTANTS
+// ═══════════════════════════════════════════════════
+const WW = 2400, WH = 1800;
+const SPD = 3.8;
+
+// ═══════════════════════════════════════════════════
+// 2. ROAD DATA
+// ═══════════════════════════════════════════════════
+// Horizontal: {y, h, name}
+const HR = [
+  { y:190,  h:58, name:'Jl. Lintas Sumatera' },
+  { y:540,  h:68, name:'Jl. Jend. Ahmad Yani' },
+  { y:870,  h:58, name:'Jl. RA Kartini' },
+  { y:1190, h:58, name:'Jl. Ki Hajar Dewantara' },
+  { y:1470, h:58, name:'Jl. Diponegoro' },
+];
+// Vertical: {x, w, name}
+const VR = [
+  { x:240,  w:58, name:'Jl. Imam Bonjol' },
+  { x:640,  w:58, name:'Jl. AH Nasution' },
+  { x:1040, w:58, name:'Jl. KH Ahmad Dahlan' },
+  { x:1440, w:58, name:'Jl. Teuku Umar' },
+  { x:1840, w:58, name:'Jl. Soekarno-Hatta' },
+];
+
+// ═══════════════════════════════════════════════════
+// 3. LANDMARK DATA
+// ═══════════════════════════════════════════════════
+// Blocks (col,row) coords between roads:
+//  VR gaps: 0-240 | 298-640 | 698-1040 | 1098-1440 | 1498-1840 | 1898-2400
+//  HR gaps: 0-190 | 248-540 | 608-870  | 928-1190  | 1248-1470 | 1528-1800
+const LMS = [
+  {
+    id:'masjid', name:'Masjid Agung Taqwa Metro',
+    cat:'🕌 Masjid',
+    x:700, y:268, w:155, h:145,
+    c:'#27ae60', dk:'#1e8449', ic:'🕌',
+    desc:'Masjid megah kebanggaan Kota Metro Lampung, salah satu masjid terbesar di Provinsi Lampung dengan arsitektur yang indah.',
+    maps:'https://maps.google.com/?q=Masjid+Agung+Taqwa+Metro+Lampung',
+    web:null,
+  },
+  {
+    id:'walikota', name:'Kantor Walikota Metro',
+    cat:'🏛️ Pemerintahan',
+    x:305, y:262, w:188, h:135,
+    c:'#2980b9', dk:'#1f618d', ic:'🏛️',
+    desc:'Pusat pemerintahan Kota Metro, Lampung. Tempat berlangsungnya kegiatan administrasi dan pelayanan publik kota.',
+    maps:'https://maps.google.com/?q=Kantor+Walikota+Metro+Lampung',
+    web:'https://metrokota.go.id',
+  },
+  {
+    id:'rs', name:'RS Ahmad Yani Metro',
+    cat:'🏥 Rumah Sakit',
+    x:1100, y:258, w:178, h:142,
+    c:'#e74c3c', dk:'#c0392b', ic:'🏥',
+    desc:'RSUD Ahmad Yani, rumah sakit pemerintah utama di Kota Metro yang melayani masyarakat Lampung dan sekitarnya.',
+    maps:'https://maps.google.com/?q=RSUD+Ahmad+Yani+Kota+Metro+Lampung',
+    web:'https://rsahmadyani.com',
+  },
+  {
+    id:'perpus', name:'Perpustakaan Daerah Kota Metro',
+    cat:'📚 Pendidikan & Budaya',
+    x:1110, y:52, w:155, h:115,
+    c:'#7f8c8d', dk:'#566573', ic:'📚',
+    desc:'Perpustakaan Daerah Kota Metro, pusat literasi dan pengetahuan untuk seluruh lapisan masyarakat Metro.',
+    maps:'https://maps.google.com/?q=Perpustakaan+Daerah+Kota+Metro+Lampung',
+    web:null,
+  },
+  {
+    id:'iain', name:'IAIN Metro',
+    cat:'🎓 Perguruan Tinggi Negeri',
+    x:1510, y:32, w:212, h:155,
+    c:'#d35400', dk:'#a04000', ic:'🎓',
+    desc:'Institut Agama Islam Negeri (IAIN) Metro, kampus Islam negeri terkemuka di Kota Metro, Lampung.',
+    maps:'https://maps.google.com/?q=IAIN+Metro+Lampung',
+    web:'https://metrouniv.ac.id',
+  },
+  {
+    id:'alunalun', name:'Alun-Alun Kota Metro',
+    cat:'🌿 Wisata & Rekreasi',
+    x:706, y:618, w:328, h:245,
+    c:'#27ae60', dk:'#1e8449', ic:'🌿',
+    desc:'Jantung Kota Metro! Ruang terbuka publik utama warga untuk olahraga, bersantai, acara budaya, dan berwisata.',
+    maps:'https://maps.google.com/?q=Alun-Alun+Kota+Metro+Lampung',
+    web:null, walk:true,
+  },
+  {
+    id:'pasar', name:'Pasar Cendrawasih Metro',
+    cat:'🛒 Perdagangan Tradisional',
+    x:18, y:620, w:200, h:215,
+    c:'#f39c12', dk:'#d68910', ic:'🛒',
+    desc:'Pusat perdagangan tradisional terbesar di Kota Metro. Tempat transaksi ekonomi sehari-hari masyarakat kota.',
+    maps:'https://maps.google.com/?q=Pasar+Cendrawasih+Metro+Lampung',
+    web:null,
+  },
+  {
+    id:'taman', name:'Taman Kota Metro',
+    cat:'🌳 Taman & Rekreasi',
+    x:1108, y:618, w:310, h:238,
+    c:'#16a085', dk:'#0e6655', ic:'🌳',
+    desc:'Ruang terbuka hijau kebanggaan warga Kota Metro. Tempat favorit untuk olahraga pagi dan bersantai sore hari.',
+    maps:'https://maps.google.com/?q=Taman+Kota+Metro+Lampung',
+    web:null, walk:true,
+  },
+  {
+    id:'um', name:'Universitas Muhammadiyah Metro',
+    cat:'🎓 Perguruan Tinggi Swasta',
+    x:15, y:945, w:213, h:228,
+    c:'#8e44ad', dk:'#6c3483', ic:'🎓',
+    desc:'Perguruan tinggi Muhammadiyah terkemuka di Kota Metro, diakui atas kualitas pendidikan dan risetnya.',
+    maps:'https://maps.google.com/?q=Universitas+Muhammadiyah+Metro+Lampung',
+    web:'https://www.ummetro.ac.id',
+  },
+  {
+    id:'stadion', name:'Stadion Tejosari Metro',
+    cat:'⚽ Olahraga',
+    x:1505, y:940, w:313, h:242,
+    c:'#1abc9c', dk:'#148f77', ic:'⚽',
+    desc:'Stadion utama Kota Metro untuk berbagai event olahraga, kompetisi regional, dan pertandingan sepak bola.',
+    maps:'https://maps.google.com/?q=Stadion+Tejosari+Metro+Lampung',
+    web:null, walk:true,
+  },
+  {
+    id:'politeknik', name:'Politeknik Negeri Metro',
+    cat:'🏫 Perguruan Tinggi Vokasi',
+    x:1900, y:625, w:200, h:162,
+    c:'#c0392b', dk:'#922b21', ic:'🏫',
+    desc:'Politeknik Negeri Metro, pusat pendidikan vokasi dan teknologi terapan unggulan di Kota Metro.',
+    maps:'https://maps.google.com/?q=Politeknik+Negeri+Metro+Lampung',
+    web:null,
+  },
+];
+
+// ═══════════════════════════════════════════════════
+// 4. TREE GENERATION (avoid roads & buildings)
+// ═══════════════════════════════════════════════════
+function mkRng(seed) {
+  let s = seed | 0;
+  return () => { s=(s*1103515245+12345)&0x7fffffff; return s/0x7fffffff; };
+}
+const rng = mkRng(7391);
+
+function onObstacle(x, y, r) {
+  for (const h of HR) if (y+r>h.y-4 && y-r<h.y+h.h+4) return true;
+  for (const v of VR) if (x+r>v.x-4 && x-r<v.x+v.w+4) return true;
+  for (const lm of LMS) {
+    if (x+r>lm.x-6 && x-r<lm.x+lm.w+6 && y+r>lm.y-6 && y-r<lm.y+lm.h+6) return true;
+  }
+  return false;
+}
+
+const TREES = [];
+const TREE_ZONES = [
+  {x:18,   y:18,  w:214, h:168, n:12},
+  {x:308,  y:18,  w:326, h:168, n:9},
+  {x:704,  y:18,  w:330, h:168, n:9},
+  {x:1260, y:18,  w:170, h:168, n:7},
+  {x:1735, y:18,  w:98,  h:168, n:5},
+  {x:1905, y:18,  w:460, h:168, n:9},
+  {x:18,   y:250, w:215, h:282, n:8},
+  {x:510,  y:250, w:124, h:282, n:6},
+  {x:870,  y:250, w:165, h:282, n:7},
+  {x:1300, y:250, w:130, h:282, n:6},
+  {x:1735, y:250, w:98,  h:282, n:5},
+  {x:1905, y:250, w:460, h:282, n:9},
+  {x:236,  y:610, w:10,  h:255, n:3},
+  {x:1435, y:610, w:10,  h:255, n:3},
+  {x:1905, y:940, w:460, h:234, n:14},
+  {x:18,   y:1210,w:2360,h:245, n:28},
+  {x:18,   y:1545,w:2360,h:248, n:22},
+  {x:700,  y:930, w:390, h:250, n:10},
+];
+TREE_ZONES.forEach(z => {
+  let placed=0, tries=0;
+  while(placed < z.n && tries < z.n*8){
+    tries++;
+    const tx = z.x + rng()*z.w;
+    const ty = z.y + rng()*z.h;
+    const tr = 9 + rng()*8;
+    if(!onObstacle(tx,ty,tr)){
+      TREES.push({x:tx, y:ty, r:tr, d:rng()>.5});
+      placed++;
+    }
+  }
+});
+
+// ═══════════════════════════════════════════════════
+// 5. GAME STATE
+// ═══════════════════════════════════════════════════
+const CHAR = { x:870, y:570, face:'down', moving:false };
+const CAM  = { x:0, y:0 };
+const KEYS = {};
+let near = null;
+let popOpen = false;
+let running = false;
+
+// ═══════════════════════════════════════════════════
+// 6. CANVAS SETUP
+// ═══════════════════════════════════════════════════
+const canvas = document.getElementById('c');
+const ctx    = canvas.getContext('2d');
+const mm     = document.getElementById('mm');
+const mmCtx  = mm.getContext('2d');
+let W, H;
+function resize(){ W=canvas.width=window.innerWidth; H=canvas.height=window.innerHeight; }
+resize();
+window.addEventListener('resize', resize);
+
+// ═══════════════════════════════════════════════════
+// 7. INPUT
+// ═══════════════════════════════════════════════════
+window.addEventListener('keydown', e => {
+  KEYS[e.code] = true;
+  if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.key)) e.preventDefault();
+  if(e.code==='Enter' && near && !popOpen) openPopup(near);
+  if(e.code==='Escape') closePopup();
+});
+window.addEventListener('keyup', e => { KEYS[e.code]=false; });
+
+// Mobile d-pad
+if('ontouchstart' in window) document.getElementById('dpad').style.display='block';
+const DMAP = {
+  'd-u':'ArrowUp', 'd-d':'ArrowDown', 'd-l':'ArrowLeft', 'd-r':'ArrowRight'
+};
+Object.entries(DMAP).forEach(([id,code]) => {
+  const el = document.getElementById(id);
+  const on = e=>{e.preventDefault();KEYS[code]=true; el.classList.add('pressed');};
+  const off= e=>{e.preventDefault();KEYS[code]=false;el.classList.remove('pressed');};
+  el.addEventListener('touchstart',on,{passive:false});
+  el.addEventListener('touchend',off,{passive:false});
+  el.addEventListener('touchcancel',off,{passive:false});
+});
+
+// Canvas click: open popup for clicked landmark, or close
+canvas.addEventListener('click', e => {
+  if(popOpen){ closePopup(); return; }
+  const wx = e.clientX + CAM.x, wy = e.clientY + CAM.y;
+  for(const lm of LMS){
+    if(wx>=lm.x && wx<=lm.x+lm.w && wy>=lm.y && wy<=lm.y+lm.h){
+      openPopup(lm); break;
+    }
+  }
+});
+
+// ═══════════════════════════════════════════════════
+// 8. POPUP
+// ═══════════════════════════════════════════════════
+function openPopup(lm){
+  document.getElementById('p-icon').textContent=lm.ic;
+  document.getElementById('p-cat').textContent=lm.cat;
+  document.getElementById('p-name').textContent=lm.name;
+  document.getElementById('p-desc').textContent=lm.desc;
+  const btns=document.getElementById('p-btns');
+  btns.innerHTML='';
+  if(lm.maps){
+    const a=document.createElement('a');
+    a.href=lm.maps; a.target='_blank'; a.className='pbtn g';
+    a.textContent='📍 Google Maps'; btns.appendChild(a);
+  }
+  if(lm.web){
+    const a=document.createElement('a');
+    a.href=lm.web; a.target='_blank'; a.className='pbtn b';
+    a.textContent='🌐 Website Resmi'; btns.appendChild(a);
+  }
+  const cl=document.createElement('button');
+  cl.className='pbtn x'; cl.textContent='✕ Tutup'; cl.onclick=closePopup;
+  btns.appendChild(cl);
+  document.getElementById('popup').classList.add('show');
+  popOpen=true;
+}
+function closePopup(){
+  document.getElementById('popup').classList.remove('show');
+  popOpen=false;
+}
+
+// ═══════════════════════════════════════════════════
+// 9. COLLISION & PROXIMITY
+// ═══════════════════════════════════════════════════
+const PAD = 11;
+function collides(nx, ny){
+  if(nx<PAD||nx>WW-PAD||ny<PAD||ny>WH-PAD) return true;
+  for(const lm of LMS){
+    if(lm.walk) continue;
+    if(nx+PAD>lm.x+3 && nx-PAD<lm.x+lm.w-3 &&
+       ny+PAD>lm.y+3 && ny-PAD<lm.y+lm.h-3) return true;
+  }
+  return false;
+}
+
+const PROX = 85;
+function edgeDist(cx,cy,lm){
+  const dx=Math.max(lm.x-cx, 0, cx-(lm.x+lm.w));
+  const dy=Math.max(lm.y-cy, 0, cy-(lm.y+lm.h));
+  return Math.sqrt(dx*dx+dy*dy);
+}
+function checkProximity(){
+  let best=null, bd=PROX;
+  for(const lm of LMS){
+    const d=edgeDist(CHAR.x,CHAR.y,lm);
+    if(d<bd){bd=d; best=lm;}
+  }
+  if(best!==near){
+    near=best;
+    document.getElementById('hud-loc').textContent=
+      near ? `📍 ${near.name}` : '📍 Jelajahi Kota!';
+    if(!near && popOpen) closePopup();
+  }
+}
+
+// ═══════════════════════════════════════════════════
+// 10. UPDATE
+// ═══════════════════════════════════════════════════
+function update(){
+  const dx = (KEYS['ArrowRight']||KEYS['KeyD']?1:0)-(KEYS['ArrowLeft']||KEYS['KeyA']?1:0);
+  const dy = (KEYS['ArrowDown'] ||KEYS['KeyS']?1:0)-(KEYS['ArrowUp']  ||KEYS['KeyW']?1:0);
+  CHAR.moving = dx!==0||dy!==0;
+  if(CHAR.moving){
+    const len=Math.sqrt(dx*dx+dy*dy);
+    const vx=(dx/len)*SPD, vy=(dy/len)*SPD;
+    if(dx>0)      CHAR.face='right';
+    else if(dx<0) CHAR.face='left';
+    else if(dy>0) CHAR.face='down';
+    else           CHAR.face='up';
+    if(!collides(CHAR.x+vx, CHAR.y))   CHAR.x+=vx;
+    if(!collides(CHAR.x,    CHAR.y+vy)) CHAR.y+=vy;
+  }
+  // Smooth camera
+  const tx=CHAR.x-W/2, ty=CHAR.y-H/2;
+  CAM.x+=(Math.max(0,Math.min(WW-W,tx))-CAM.x)*0.09;
+  CAM.y+=(Math.max(0,Math.min(WH-H,ty))-CAM.y)*0.09;
+  checkProximity();
+}
+
+// ═══════════════════════════════════════════════════
+// 11. DRAW WORLD
+// ═══════════════════════════════════════════════════
+function drawWorld(){
+  const cx=Math.floor(CAM.x), cy=Math.floor(CAM.y);
+  const now=Date.now();
+
+  // ── Grass background ──
+  ctx.fillStyle='#3a7c27';
+  ctx.fillRect(0,0,W,H);
+
+  // Subtle grass grid texture
+  ctx.fillStyle='rgba(0,0,0,0.045)';
+  const gs=36, ox=-(cx%gs), oy=-(cy%gs);
+  for(let x=ox;x<W+gs;x+=gs){
+    ctx.fillRect(x,0,1,H);
+  }
+  for(let y=oy;y<H+gs;y+=gs){
+    ctx.fillRect(0,y,W,1);
+  }
+
+  // ── Trees (draw before roads) ──
+  TREES.forEach(t=>{
+    const sx=t.x-cx, sy=t.y-cy;
+    if(sx<-40||sx>W+40||sy<-40||sy>H+40) return;
+    ctx.fillStyle='rgba(0,0,0,.22)';
+    ctx.beginPath(); ctx.ellipse(sx+3,sy+4,t.r,t.r*.55,0,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle=t.d?'#216b17':'#2d8c22';
+    ctx.beginPath(); ctx.arc(sx,sy,t.r,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle=t.d?'#195212':'#267c1c';
+    ctx.beginPath(); ctx.arc(sx-2,sy-2,t.r*.58,0,Math.PI*2); ctx.fill();
+  });
+
+  // ── Horizontal roads ──
+  HR.forEach(r=>{
+    const sy=r.y-cy;
+    if(sy>H+4||sy+r.h<-4) return;
+    ctx.fillStyle='#484852';
+    ctx.fillRect(0,sy,W,r.h);
+    ctx.fillStyle='#686874'; // sidewalk top
+    ctx.fillRect(0,sy,W,7);
+    ctx.fillStyle='#686874'; // sidewalk bottom
+    ctx.fillRect(0,sy+r.h-7,W,7);
+    // Center dashes
+    ctx.save();
+    ctx.setLineDash([26,16]);
+    ctx.lineDashOffset=-(cx%42);
+    ctx.strokeStyle='rgba(255,210,0,0.65)'; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.moveTo(0,sy+r.h/2); ctx.lineTo(W,sy+r.h/2); ctx.stroke();
+    ctx.setLineDash([]); ctx.restore();
+    // Road name
+    ctx.fillStyle='rgba(255,255,255,.22)';
+    ctx.font='10px monospace';
+    ctx.fillText(r.name, 36, sy+r.h/2-5);
+  });
+
+  // ── Vertical roads ──
+  VR.forEach(r=>{
+    const sx=r.x-cx;
+    if(sx>W+4||sx+r.w<-4) return;
+    ctx.fillStyle='#484852';
+    ctx.fillRect(sx,0,r.w,H);
+    ctx.fillStyle='#686874';
+    ctx.fillRect(sx,0,7,H);
+    ctx.fillRect(sx+r.w-7,0,7,H);
+    ctx.save();
+    ctx.setLineDash([26,16]);
+    ctx.lineDashOffset=-(cy%42);
+    ctx.strokeStyle='rgba(255,210,0,0.65)'; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.moveTo(sx+r.w/2,0); ctx.lineTo(sx+r.w/2,H); ctx.stroke();
+    ctx.setLineDash([]); ctx.restore();
+    // Vertical road label
+    ctx.save();
+    ctx.translate(sx+r.w/2+4, 50);
+    ctx.rotate(Math.PI/2);
+    ctx.fillStyle='rgba(255,255,255,.22)';
+    ctx.font='10px monospace';
+    ctx.fillText(r.name,0,0);
+    ctx.restore();
+  });
+
+  // ── Intersections ──
+  HR.forEach(h=>{ VR.forEach(v=>{
+    const sx=v.x-cx, sy=h.y-cy;
+    ctx.fillStyle='#3e3e48';
+    ctx.fillRect(sx,sy,v.w,h.h);
+  });});
+
+  // ── Street lamps at intersections ──
+  HR.forEach(h=>{ VR.forEach(v=>{
+    [[v.x+4,h.y-8],[v.x+v.w-10,h.y+h.h+2],[v.x+4,h.y+h.h+2],[v.x+v.w-10,h.y-8]].forEach(([lx,ly])=>{
+      const sx=lx-cx, sy=ly-cy;
+      if(sx<-10||sx>W+10||sy<-10||sy>H+10) return;
+      ctx.fillStyle='#555';
+      ctx.fillRect(sx,sy,4,10);
+      ctx.fillStyle='rgba(255,240,150,0.8)';
+      ctx.beginPath(); ctx.arc(sx+2,sy,4,0,Math.PI*2); ctx.fill();
+    });
+  });});
+
+  // ── Landmarks ──
+  LMS.forEach(lm=>{
+    const sx=lm.x-cx, sy=lm.y-cy;
+    if(sx+lm.w<-10||sx>W+10||sy+lm.h<-10||sy>H+10) return;
+    const isNear = lm===near;
+    const pulse  = 0.5+0.5*Math.sin(now/500*Math.PI);
+
+    // Shadow
+    ctx.fillStyle='rgba(0,0,0,.28)';
+    ctx.fillRect(sx+5,sy+5,lm.w,lm.h);
+
+    if(lm.walk){
+      // ── Park / walkable area ──
+      ctx.fillStyle=lm.c;
+      ctx.fillRect(sx,sy,lm.w,lm.h);
+      // Tree dots
+      ctx.fillStyle=lm.dk;
+      const tc=Math.floor(lm.w/45), tr2=Math.floor(lm.h/45);
+      for(let r=0;r<tr2;r++) for(let c=0;c<tc;c++){
+        ctx.beginPath();
+        ctx.arc(sx+22+c*(lm.w-28)/Math.max(tc-1,1), sy+22+r*(lm.h-28)/Math.max(tr2-1,1), 11, 0, Math.PI*2);
+        ctx.fill();
+      }
+      // Paths
+      ctx.strokeStyle='rgba(210,190,120,.4)'; ctx.lineWidth=7;
+      ctx.beginPath();
+      ctx.moveTo(sx,sy+lm.h/2); ctx.lineTo(sx+lm.w,sy+lm.h/2);
+      ctx.moveTo(sx+lm.w/2,sy); ctx.lineTo(sx+lm.w/2,sy+lm.h);
+      ctx.stroke();
+    } else {
+      // ── Building ──
+      ctx.fillStyle=lm.dk;
+      ctx.fillRect(sx,sy,lm.w,lm.h);
+      // Façade
+      ctx.fillStyle=lm.c;
+      ctx.fillRect(sx+2,sy+10,lm.w-4,lm.h-12);
+      // Roof ledge
+      ctx.fillStyle=lm.dk;
+      ctx.fillRect(sx,sy,lm.w,10);
+      ctx.fillStyle='rgba(0,0,0,.2)';
+      ctx.fillRect(sx,sy+9,lm.w,3);
+      // Windows
+      const wc=Math.max(1,Math.floor((lm.w-18)/26));
+      const wr2=Math.max(1,Math.floor((lm.h-22)/22));
+      for(let r=0;r<wr2;r++){
+        for(let c=0;c<wc;c++){
+          const lit=(r*13+c*7)%5!==0;
+          ctx.fillStyle=lit?'rgba(255,245,190,.38)':'rgba(80,130,220,.18)';
+          ctx.fillRect(sx+9+c*((lm.w-18)/wc), sy+14+r*((lm.h-22)/wr2), 12, 10);
+        }
+      }
+      // Door
+      ctx.fillStyle='rgba(0,0,0,.4)';
+      ctx.fillRect(sx+lm.w/2-8, sy+lm.h-18, 16, 18);
+    }
+
+    // Glow border when nearby
+    if(isNear){
+      ctx.shadowColor='#f4b942'; ctx.shadowBlur=16+pulse*12;
+      ctx.strokeStyle=`rgba(244,185,66,${0.55+pulse*0.45})`; ctx.lineWidth=3;
+      ctx.strokeRect(sx-3,sy-3,lm.w+6,lm.h+6);
+      ctx.shadowBlur=0;
+    }
+
+    // Icon centered
+    ctx.font='26px serif'; ctx.textAlign='center';
+    ctx.fillText(lm.ic, sx+lm.w/2, sy+lm.h/2+10);
+
+    // Name label below
+    const fz = isNear ? 9 : 8;
+    ctx.font=`bold ${fz}px 'Press Start 2P',monospace`;
+    ctx.textAlign='center';
+    const maxPx = Math.max(lm.w+20, 120);
+    const words = lm.name.split(' ');
+    const lines = [];
+    let cur='';
+    words.forEach(w=>{
+      const test=cur?cur+' '+w:w;
+      if(ctx.measureText(test).width>maxPx && cur){
+        lines.push(cur); cur=w;
+      } else cur=test;
+    });
+    if(cur) lines.push(cur);
+    const ly0 = sy+lm.h+15;
+    lines.slice(0,3).forEach((l,i)=>{
+      ctx.fillStyle='rgba(0,0,0,.55)';
+      ctx.fillText(l, sx+lm.w/2+1, ly0+i*14+1);
+      ctx.fillStyle=isNear?'#f4b942':'#eee';
+      ctx.fillText(l, sx+lm.w/2, ly0+i*14);
+    });
+
+    // Interact prompt
+    if(isNear && !popOpen){
+      ctx.font='7px "Press Start 2P",monospace';
+      ctx.fillStyle=`rgba(244,185,66,${0.7+pulse*0.3})`;
+      ctx.fillText('[ ENTER / KLIK ]', sx+lm.w/2, sy-14);
+    }
+    ctx.textAlign='left';
+  });
+}
+
+// ═══════════════════════════════════════════════════
+// 12. DRAW CHARACTER
+// ═══════════════════════════════════════════════════
+function drawChar(){
+  const sx=Math.round(CHAR.x-CAM.x);
+  const sy=Math.round(CHAR.y-CAM.y);
+  const f=CHAR.moving?(Math.floor(Date.now()/125)&1):0;
+
+  // Shadow
+  ctx.fillStyle='rgba(0,0,0,.32)';
+  ctx.beginPath(); ctx.ellipse(sx,sy,11,5,0,0,Math.PI*2); ctx.fill();
+
+  // Legs (alternate up/down)
+  const lly=f?3:0, rly=f?0:3;
+  ctx.fillStyle='#1c2840';
+  ctx.fillRect(sx-7, sy-13-lly, 5, 13+lly);
+  ctx.fillRect(sx+2, sy-13-rly, 5, 13+rly);
+
+  // Shoes
+  ctx.fillStyle='#1a1a1a';
+  ctx.fillRect(sx-8, sy-1, 7, 4);
+  ctx.fillRect(sx+1, sy-1, 7, 4);
+
+  // Body / shirt
+  ctx.fillStyle='#2980b9';
+  ctx.fillRect(sx-9, sy-26, 18, 13);
+  // Collar detail
+  ctx.fillStyle='#1f618d';
+  ctx.fillRect(sx-3, sy-26, 6, 4);
+
+  // Arms (swing opposite to step)
+  const as=f?3:-3;
+  ctx.fillStyle='#2980b9';
+  ctx.fillRect(sx-14, sy-25+as, 5, 10);
+  ctx.fillRect(sx+9,  sy-25-as, 5, 10);
+  // Hands
+  ctx.fillStyle='#FDBCB4';
+  ctx.fillRect(sx-14, sy-16+as, 5, 5);
+  ctx.fillRect(sx+9,  sy-16-as, 5, 5);
+
+  // Head
+  ctx.fillStyle='#FDBCB4';
+  ctx.fillRect(sx-6, sy-39, 12, 14);
+  // Hair
+  ctx.fillStyle='#3d1e06';
+  ctx.fillRect(sx-6, sy-39, 12, 5);
+  if(CHAR.face==='right') ctx.fillRect(sx+5, sy-36, 3, 5);
+  if(CHAR.face==='left')  ctx.fillRect(sx-8, sy-36, 3, 5);
+
+  // Eyes & face features
+  ctx.fillStyle='#111';
+  const ey=sy-30;
+  switch(CHAR.face){
+    case 'down':
+      ctx.fillRect(sx-4,ey,2,2); ctx.fillRect(sx+2,ey,2,2);
+      ctx.fillStyle='#c07080';
+      ctx.fillRect(sx-1,ey+5,4,1);
+      break;
+    case 'right': ctx.fillRect(sx+3,ey,2,2); break;
+    case 'left':  ctx.fillRect(sx-4,ey,2,2); break;
+    case 'up':
+      ctx.fillStyle='#3d1e06';
+      ctx.fillRect(sx-6,sy-39,12,7);
+      break;
+  }
+}
+
+// ═══════════════════════════════════════════════════
+// 13. DRAW MINIMAP
+// ═══════════════════════════════════════════════════
+function drawMinimap(){
+  const sx=160/WW, sy=120/WH;
+  mmCtx.fillStyle='#2a5c1a';
+  mmCtx.fillRect(0,0,160,120);
+  // Roads
+  mmCtx.fillStyle='#444';
+  HR.forEach(r=>mmCtx.fillRect(0,r.y*sy,160,Math.max(r.h*sy,1)));
+  VR.forEach(r=>mmCtx.fillRect(r.x*sx,0,Math.max(r.w*sx,1),120));
+  // Landmarks
+  LMS.forEach(lm=>{
+    mmCtx.fillStyle=lm.c;
+    mmCtx.fillRect(lm.x*sx, lm.y*sy, Math.max(lm.w*sx,3), Math.max(lm.h*sy,3));
+  });
+  // Viewport rect
+  mmCtx.strokeStyle='rgba(255,255,255,.5)'; mmCtx.lineWidth=1;
+  mmCtx.strokeRect(CAM.x*sx, CAM.y*sy, W*sx, H*sy);
+  // Player dot
+  mmCtx.fillStyle='#f4b942';
+  mmCtx.beginPath(); mmCtx.arc(CHAR.x*sx, CHAR.y*sy, 3, 0, Math.PI*2); mmCtx.fill();
+}
+
+// ═══════════════════════════════════════════════════
+// 14. GAME LOOP
+// ═══════════════════════════════════════════════════
+function loop(){
+  if(!running) return;
+  update();
+  drawWorld();
+  drawChar();
+  drawMinimap();
+  requestAnimationFrame(loop);
+}
+
+function startGame(){
+  const splash=document.getElementById('splash');
+  splash.style.opacity='0';
+  setTimeout(()=>{ splash.style.display='none'; }, 700);
+  running=true;
+  loop();
+}
+</script>
+</body>
+</html>
